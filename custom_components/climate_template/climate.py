@@ -57,6 +57,7 @@ _LOGGER = logging.getLogger(__name__)
 
 CONF_CURRENT_HUMIDITY_TEMPLATE = "current_humidity_template"
 CONF_SWING_MODE_TEMPLATE = "swing_mode_template"
+CONF_HVAC_MODE_TEMPLATE = "hvac_mode_template"
 
 CONF_SET_TEMPERATURE_ACTION = "set_temperature"
 CONF_SET_HVAC_MODE_ACTION = "set_hvac_mode"
@@ -144,6 +145,7 @@ class TemplateClimate(TemplateEntity, ClimateEntity, RestoreEntity):
         self._current_temp_template = config.get(CONF_CURRENT_TEMP_TEMPLATE)
         self._current_humidity_template = config.get(CONF_CURRENT_HUMIDITY_TEMPLATE)
         self._swing_mode_template = config.get(CONF_SWING_MODE_TEMPLATE)
+        self._hvac_mode_template = config.get(CONF_HVAC_MODE_TEMPLATE)
 
         self._available = True
         self._unit_of_measurement = hass.config.units.temperature_unit
@@ -218,6 +220,14 @@ class TemplateClimate(TemplateEntity, ClimateEntity, RestoreEntity):
                 )
 
         # register templates
+        if self._hvac_mode_template:
+            self.add_template_attribute(
+                "_current_operation",
+                self._hvac_mode_template,
+                None,
+                self._update_hvac_mode,
+                none_on_template_error=True,
+            )
         if self._current_temp_template:
             self.add_template_attribute(
                 "_current_temp",
@@ -243,6 +253,19 @@ class TemplateClimate(TemplateEntity, ClimateEntity, RestoreEntity):
                 None,
                 self._update_swing_mode,
                 none_on_template_error=True,
+            )
+
+    def _update_hvac_mode(self, hvac_mode):
+        if hvac_mode in self._modes_list:
+            # check swing mode actually changed
+            if self._current_operation != hvac_mode:
+                self._current_operation = hvac_mode
+                self.hass.async_create_task(self.async_set_swing_mode(hvac_mode))
+        elif hvac_mode not in (STATE_UNKNOWN, STATE_UNAVAILABLE):
+            _LOGGER.error(
+                "Received invalid hvac mode: %s. Expected: %s.",
+                hvac_mode,
+                self._modes_list,
             )
 
     def _update_current_temp(self, temp):
